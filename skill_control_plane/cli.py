@@ -1,11 +1,7 @@
-"""skillcli CLI 入口（阶段 0 stub）。
+"""skillcli CLI 入口。
 
-阶段 0 只保证 `skillcli --help` 可读、所有子命令注册到位；每个子命令打印
-"未实装（见 SPEC §14 阶段 N）"并返回退出码 2，避免下游脚本误以为成功。
-真实实现按阶段 1–6 逐步上线。
-
-CLI 名为何不是规格 §4/§11 里的 `scp`：与系统 OpenSSH `scp`（secure copy）撞名，
-脚手架自检立刻击中，DECISIONS 2026-05-24 记一笔已改用 `skillcli`（用户拍板）。
+阶段 1 接通 `scan`；verify / usage / rules / dashboard / doctor 仍是 stub，
+打印"未实装（见 SPEC §14 阶段 N）"并返回退出码 2。
 """
 from __future__ import annotations
 
@@ -25,8 +21,41 @@ def _not_implemented(name: str, phase: int) -> int:
     return EXIT_NOT_IMPLEMENTED
 
 
-def _cmd_scan(_args: argparse.Namespace) -> int:
-    return _not_implemented("scan", 1)
+def _cmd_scan(args: argparse.Namespace) -> int:
+    from .adapters import ClaudeCodeAdapter, CodexAdapter
+    from .discovery import discover_all
+    from . import registry as reg
+
+    if not args.no_llm:
+        print(
+            "⚠️ --llm 暂未实装（Phase 1 不依赖 LLM），降级到 --no-llm 行为。",
+            file=sys.stderr,
+        )
+
+    adapters = [ClaudeCodeAdapter(), CodexAdapter()]
+    records = discover_all(adapters)
+    if not records:
+        print(
+            "未发现任何 skill。检查 ~/.claude/skills/ 与 ~/.codex/skills/ 是否存在。",
+            file=sys.stderr,
+        )
+        return 1
+
+    entries = reg.build(records)
+    target = reg.DEFAULT_REGISTRY_PATH
+    try:
+        reg.save(entries, target)
+    except OSError as e:
+        print(f"写注册表失败: {e}", file=sys.stderr)
+        return 1
+
+    print(f"扫描完成：共 {len(entries)} 个 skill")
+    for k, v in reg.stats(entries).items():
+        if k == "total":
+            continue
+        print(f"  {k:20s} {v}")
+    print(f"\n已写入 {target}")
+    return 0
 
 
 def _cmd_verify(_args: argparse.Namespace) -> int:

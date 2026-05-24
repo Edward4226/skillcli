@@ -148,6 +148,36 @@ Codex 用量统计需要**替代信号**而非 tool_use 计数。候选：
 
 ---
 
+## 2026-05-24 · 阶段 1 完成
+
+### 实装范围（与 SPEC §14 阶段 1 + Q5 反转一致）
+- `skill_control_plane/adapters/{__init__,base,claude_code,codex}.py`
+- `skill_control_plane/discovery.py`（含标准库 frontmatter 解析，不引 PyYAML）
+- `skill_control_plane/registry.py`（SPEC §8.2 schema、--no-llm 摘要、token Jaccard 去重）
+- `skill_control_plane/cli.py` _cmd_scan 接线
+- `tests/{test_discovery,test_registry}.py`（unittest，17 条）
+
+### 真机自检
+- `skillcli scan` 输出：**130 个 skill**（claude 67 + codex 63）
+- 抓到 **1 个跨工具重复**：`codex:user:frontend-design` ↔ `claude:user:frontend-design`——这是控制平面想消除的典型 context rot 来源
+- 注册表落 `~/.skill-control-plane/registry.json`
+- 17/17 unittest pass
+
+### 侦察预估 vs 真机的差异（不是 bug，是 adapter 行为正确）
+- 侦察说 Codex `skills.disabled/` 有 2 个 → 真机 adapter 报 0（"disabled" scope）
+- 侦察说 Codex `skills/` 有 64 个 → 真机 adapter 报 63（"user" scope）
+- 原因：`ls -d <dir>/*/` 数 dir，但**不是每个 dir 都含 SKILL.md**：
+  - `skills/` 里 1 个 dir 无 SKILL.md
+  - `skills.disabled/` 里 2 个 dir 都无 SKILL.md
+- 结论：adapter 正确——"存在目录" ≠ "是有效 skill"。
+
+### --llm 实装边界
+- Q3 默认 `--no-llm`，已实装；行为=取 description 首句。
+- `--llm` 被 cli 接受但**降级**到 `--no-llm` 行为，并打一条 stderr 警告（Phase 3+ 实装）。
+  待 Phase 3/4 视 LLM 客户端策略再决定（OpenAI / Anthropic SDK / 本地）。
+
+---
+
 ## 2026-05-24 · 仓库上 GitHub
 
 - **GitHub 名头核查**：`skillcli` 在 GitHub 完全空地——22 个 `q=skillcli+in:name` 结果全是 `skillclip/skillclimb/skillclient/skillclicker/...` 等更长变体，**无人占有精确 `skillcli`**；`Edward4226/skillcli` 验证 404。

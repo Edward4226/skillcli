@@ -37,7 +37,9 @@ skillcli rules validate  # 阶段 6
 ## 进度
 
 - [x] 阶段 0：脚手架（pyproject / LICENSE / CLI stub / DECISIONS）
-- [ ] 阶段 1：发现与注册（discovery + registry + adapters：**Claude + Codex 同步**）
+- [x] 阶段 1：发现与注册（discovery + registry + adapters：**Claude + Codex 同步**）
+  - `skillcli scan` 在本机扫到 130 个 skill（67 Claude + 63 Codex），抓到 1 个跨工具重复
+  - 17/17 unittest 通过；注册表落地 `~/.skill-control-plane/registry.json`
 - [ ] 阶段 2：质量门（verify：结构 + 触发器 lint + 安全扫描）
 - [ ] 阶段 3：用量（usage：Claude JSONL **+** Codex transcript 双解析 + 死重 + 规则建议草案）
 - [ ] 阶段 4：看板 P0（dashboard：清单 + 徽章 + 死重 + 用量）
