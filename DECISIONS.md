@@ -220,6 +220,47 @@ Codex 用量统计需要**替代信号**而非 tool_use 计数。候选：
 
 ---
 
+## 2026-05-24 · Phase 3 完成 + 一个重要的产品洞察
+
+### 实装
+- `skill_control_plane/usage.py`：`SkillInvocation`（含 cwd + user_prompt 上下文）、`parse_claude_invocations` 流式解析、`aggregate_stats`、`mine_rule_suggestions`（cwd 集中度启发式）、`save_suggestions` 落 `~/.skill-control-plane/suggestions.json`
+- `cli.py` `_cmd_usage` 接通：用量 + 死重 + 规则建议
+- `registry.UsageState` 加 `source` 字段（`claude_jsonl` / `unsupported` / `unknown`），让 Codex 不被误标"死重"
+- `tests/test_usage.py`：11 条 unittest（覆盖大小写不敏感、多键名 fallback、since 过滤、坏行不崩、cwd 集中度规则、< 3 次不挖）
+- 累计 17 + 11 + 11 = **39/39 unittest pass**
+
+### 用户拍板：Codex 用量"诚实降级"
+Codex transcript 无离散 `Skill` tool 调用（Phase 1 侦察）。用户选 C 选项：
+- Codex skill 的 `usage.source = "unsupported"`、`invocations = 0`
+- 看板（Phase 4）凭此字段与 Claude "死重" 区分，不假装做不到的事
+
+### ⚠️ 真机数据揭示的**产品洞察**（重要）
+真机 `skillcli usage --since 30`：**过去 30 天 0 次 Claude `Skill` 调用**（67 个 Claude skill 全死）。
+扩到 `--since 365` 才 6 次（2026-03-20 一天用了 office-hours / plan-ceo-review / plan-eng-review / design-consultation / qa）。
+
+**洞察**：Claude 的 `Skill` tool_use 在真实使用中**极稀疏**。绝大多数 skill 是**隐式使用**——
+skill 的 description 被加载进 context，模型按指引行动，**不会显式发起 `Skill(x)` 调用**。
+`Skill()` 显式调用只在"模型决定深入某个 skill 的子工作流"时触发。
+
+**对产品的影响**（必须诚实写进未来 README 与 dashboard）：
+1. "死重 = `Skill` 调用次数 = 0" 太严苛——本机 67 个全是"死重"，看板没用
+2. **Phase 4 dashboard 必须** 区分"显式调用 vs 语义参与度"，至少加 disclaimer
+3. 如要"看起来不全死"，可加二级信号：assistant response 文本扫 skill 名引用 / SKILL.md 段被复述
+4. **不加的代价**：用户觉得"我明明用过怎么显示 0" → 信任受损
+
+### 决定
+- Phase 3 P0 **保留仅显式 `Skill` tool_use 计数**：精确、零幻觉、可解释。
+- Phase 4 dashboard 加 disclaimer + 区分 source；若必要再加二级信号（text-scan 启发式）。
+- 这是 **诚实 vs 易用** 的取舍——与 Codex "unsupported" 的诚实降级一致。
+- 该洞察也是控制平面叙事的有力素材：**"你的 skill 多数从没显式触发过——这是为什么需要规则引擎强制触发"**——把 sparse signal 反过来当卖点。
+
+### Phase 4 设计含义
+- 看板上 Claude skill 默认按 verify badge 排序（verified 在前），不按 invocations
+- 给"从未显式调用"的 skill 加 "0 explicit calls (skills often used implicitly)" tooltip
+- Codex skill 在 dashboard 上标 "Codex (usage tracking not supported)"
+
+---
+
 ## 2026-05-24 · 仓库上 GitHub
 
 - **GitHub 名头核查**：`skillcli` 在 GitHub 完全空地——22 个 `q=skillcli+in:name` 结果全是 `skillclip/skillclimb/skillclient/skillclicker/...` 等更长变体，**无人占有精确 `skillcli`**；`Edward4226/skillcli` 验证 404。

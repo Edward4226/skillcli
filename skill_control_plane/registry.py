@@ -31,6 +31,9 @@ class UsageState:
     invocations: int = 0
     last_used: str | None = None
     never_used: bool = True
+    # 用量信号来源；Phase 3 加：区分"Claude 离散调用统计"vs"Codex 不支持"vs"未跑过"。
+    # 不区分会让 dashboard 把 Codex skill 全标"死重"（误导）。
+    source: str = "unknown"     # claude_jsonl / unsupported / unknown
 
 
 @dataclass
@@ -163,8 +166,8 @@ def load(path: Path = DEFAULT_REGISTRY_PATH) -> dict[str, RegistryEntry]:
             path=body.get("path", ""),
             summary=body.get("summary", ""),
             trigger_keywords=list(body.get("trigger_keywords") or []),
-            verify=VerifyState(**{**asdict(VerifyState()), **{k: v for k, v in ve.items() if k in VerifyState.__dataclass_fields__}}),
-            usage=UsageState(**{**asdict(UsageState()), **{k: v for k, v in ue.items() if k in UsageState.__dataclass_fields__}}),
+            verify=VerifyState(**{k: v for k, v in {**asdict(VerifyState()), **ve}.items() if k in VerifyState.__dataclass_fields__}),
+            usage=UsageState(**{k: v for k, v in {**asdict(UsageState()), **ue}.items() if k in UsageState.__dataclass_fields__}),
             freshness_days=body.get("freshness_days"),
             duplicate_of=body.get("duplicate_of"),
             enabled=bool(body.get("enabled", True)),

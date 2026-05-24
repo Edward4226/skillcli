@@ -44,7 +44,12 @@ skillcli rules validate  # 阶段 6
   - `skillcli verify --all` 把 130 个 skill 分到 verified 66 / needs-review 59 / blocked 5
   - 5 个 blocked **全为真实安全问题**（curl\|sh、rm -rf /、subprocess shell=True），无误报
   - 28/28 unittest（含关键反向：SKILL.md 里教学性危险示例不触发）
-- [ ] 阶段 3：用量（usage：Claude JSONL **+** Codex transcript 双解析 + 死重 + 规则建议草案）
+- [x] 阶段 3：用量（usage：Claude JSONL 解析 + 死重 + 规则建议草案；Codex 诚实降级）
+  - `skillcli usage` 跑通；`UsageState.source` 新增字段区分 `claude_jsonl` / `unsupported` / `unknown`
+  - **真机产品洞察**：30 天内 0 次显式 `Skill` tool_use（扩 365 天仅 6 次）——
+    Claude `Skill` 工具调用本就稀疏，多数 skill 是"隐式使用"（context 内被引用、不显式 Skill() 调用）
+  - 规则建议引擎按 cwd 集中度挖（≥3 次 + ≥50% 同 cwd → suggest），合成测试验证；真机数据未触阈值
+  - 39/39 unittest
 - [ ] 阶段 4：看板 P0（dashboard：清单 + 徽章 + 死重 + 用量）
 - [ ] 阶段 5：蒸馏票 `ticket-codex-maxxing/`（AGENTS.md / CLAUDE.md / 3 个 skill）
 - [ ] 阶段 6（P1）：规则引擎 + hooks（**Claude + Codex 双套**）+ 真机触发率实验（go/no-go 关口）

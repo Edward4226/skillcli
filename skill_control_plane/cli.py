@@ -130,8 +130,90 @@ def _print_verify_summary(results) -> None:
                 print(f"     - {w.msg}")
 
 
-def _cmd_usage(_args: argparse.Namespace) -> int:
-    return _not_implemented("usage", 3)
+def _cmd_usage(args: argparse.Namespace) -> int:
+    from . import registry as reg
+    from .adapters import ClaudeCodeAdapter
+    from .usage import (
+        DEFAULT_SUGGESTIONS_PATH,
+        aggregate_stats,
+        mine_rule_suggestions,
+        parse_claude_invocations,
+        save_suggestions,
+    )
+
+    invocations = list(parse_claude_invocations(ClaudeCodeAdapter(), since_days=args.since))
+    stats = aggregate_stats(invocations)
+    suggestions = mine_rule_suggestions(invocations)
+
+    entries = reg.load()
+    if not entries:
+        print("注册表为空。请先跑 `skillcli scan`。", file=sys.stderr)
+        return 1
+
+    for sid, e in entries.items():
+        if e.tool == "claude":
+            s = stats.get(e.name)
+            if s:
+                entries[sid].usage = reg.UsageState(
+                    invocations=s.invocations,
+                    last_used=s.last_used,
+                    never_used=False,
+                    source="claude_jsonl",
+                )
+            else:
+                entries[sid].usage = reg.UsageState(
+                    invocations=0, last_used=None, never_used=True,
+                    source="claude_jsonl",
+                )
+        elif e.tool == "codex":
+            # 诚实降级（Q5/Phase 1 侦察决定）：Codex 无离散 Skill 调用
+            entries[sid].usage = reg.UsageState(
+                invocations=0, last_used=None, never_used=True,
+                source="unsupported",
+            )
+    reg.save(entries)
+    save_suggestions(suggestions)
+
+    # ---- 打印 ----
+    print(
+        f"扫了过去 {args.since} 天的 Claude transcripts，"
+        f"共 {len(invocations)} 次 skill 调用，覆盖 {len(stats)} 个不同 skill。\n"
+    )
+    if stats:
+        print("Top 10 用量：")
+        for s in sorted(stats.values(), key=lambda x: -x.invocations)[:10]:
+            print(f"  {s.invocations:5d}  {s.skill_name}")
+        print()
+
+    used_names = set(stats.keys())
+    dead_claude = [
+        e for e in entries.values()
+        if e.tool == "claude" and e.name not in used_names
+    ]
+    if dead_claude:
+        print(f"💀 死重（Claude 侧，{args.since} 天内从未调用）：{len(dead_claude)} 个")
+        for e in dead_claude[:10]:
+            print(f"   {e.id}")
+        if len(dead_claude) > 10:
+            print(f"   ... +{len(dead_claude) - 10} more")
+        print()
+
+    if suggestions:
+        print(f"📋 规则建议：{len(suggestions)} 条 → {DEFAULT_SUGGESTIONS_PATH}")
+        for s in suggestions[:5]:
+            print(f"  → {s.description}")
+            print(f"     when cwd_glob = {s.when_cwd_glob[0]}")
+            print(f"     require_skill = {s.require_skill}  (enforcement={s.enforcement})")
+        if len(suggestions) > 5:
+            print(f"  ... +{len(suggestions) - 5} more")
+    else:
+        print("📋 暂无规则建议（需 ≥3 次调用 + ≥50% cwd 集中度）。")
+
+    print(
+        f"\n[Codex] 用量诚实降级：Codex transcript 无离散 Skill 调用——"
+        f"Codex skill usage.source='unsupported'，看板凭此与 Claude 死重区分。"
+    )
+    return 0
 
 
 def _cmd_rules(args: argparse.Namespace) -> int:
