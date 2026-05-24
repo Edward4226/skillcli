@@ -58,8 +58,76 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_verify(_args: argparse.Namespace) -> int:
-    return _not_implemented("verify", 2)
+def _cmd_verify(args: argparse.Namespace) -> int:
+    from collections import Counter
+    from datetime import datetime
+    from pathlib import Path
+
+    from . import registry as reg
+    from .verify import verify_dir
+
+    if args.path and args.all:
+        print("--path 与 --all 互斥；二选一。", file=sys.stderr)
+        return 2
+
+    if args.path:
+        target = Path(args.path)
+        if not target.is_dir():
+            print(f"不是目录：{target}", file=sys.stderr)
+            return 1
+        result = verify_dir(target)
+        _print_verify_detail(result)
+        return 0 if result.badge != "blocked" else 1
+
+    if not args.all:
+        print("用法：skillcli verify <path>  或  skillcli verify --all", file=sys.stderr)
+        return 2
+
+    entries = reg.load()
+    if not entries:
+        print("注册表为空。请先跑 `skillcli scan`。", file=sys.stderr)
+        return 1
+    now = datetime.utcnow().isoformat() + "Z"
+    results = []
+    for sid, e in entries.items():
+        r = verify_dir(Path(e.path), sid=sid)
+        results.append(r)
+        entries[sid].verify = reg.VerifyState(
+            badge=r.badge, score=r.score, last_run=now,
+        )
+    reg.save(entries)
+    _print_verify_summary(results)
+    return 0
+
+
+def _print_verify_detail(r) -> None:
+    icons = {"verified": "✅", "needs-review": "⚠️", "blocked": "❌"}
+    print(f"{icons.get(r.badge, '?')} {r.id}  ({r.badge}, score={r.score}/100)")
+    for c in r.checks:
+        flag = "✓" if c.passed else "✗"
+        print(f"  {flag} [{c.level}] {c.name}: {c.msg}")
+
+
+def _print_verify_summary(results) -> None:
+    from collections import Counter
+    badges = Counter(r.badge for r in results)
+    print(f"质量门跑完：{len(results)} 个 skill")
+    for badge in ("verified", "needs-review", "blocked"):
+        print(f"  {badge:14s} {badges[badge]}")
+    blocked = [r for r in results if r.badge == "blocked"]
+    if blocked:
+        print(f"\n被阻止 ({len(blocked)}) — 头 10 条 + 头 3 个错因：")
+        for r in blocked[:10]:
+            print(f"  ❌ {r.id}")
+            for e in r.errors[:3]:
+                print(f"     - {e.msg}")
+    needs = [r for r in results if r.badge == "needs-review"]
+    if needs:
+        print(f"\n待 review ({len(needs)}) — 头 5 条 + 头 2 个 warn：")
+        for r in needs[:5]:
+            print(f"  ⚠️ {r.id} (score {r.score})")
+            for w in r.warns[:2]:
+                print(f"     - {w.msg}")
 
 
 def _cmd_usage(_args: argparse.Namespace) -> int:

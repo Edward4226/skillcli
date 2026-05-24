@@ -178,6 +178,48 @@ Codex 用量统计需要**替代信号**而非 tool_use 计数。候选：
 
 ---
 
+## 2026-05-24 · Phase 2 完成
+
+### 实装
+- `skill_control_plane/verify.py`：5 项检查 + 三档徽章 + 评分
+- `cli.py` `_cmd_verify`：支持 `<path>` 单条 / `--all` 批量；批量时写回 `registry.verify`
+- `tests/test_verify.py`：11 条 unittest，含关键反向（SKILL.md 教学性危险示例**不**触发）
+- 累计 17 + 11 = **28/28 unittest pass**
+
+### 真机 `skillcli verify --all`（130 skills）
+- **verified: 66 (51%)**
+- needs-review: 59 (45%)
+- blocked: 5 (4%)
+
+数据吻合"~50% 触发率失败"叙事：约一半 skill 有 trigger/length/size 类 lint 问题，直接对应规格 §1.1 的痛点。
+
+### 5 个 blocked 全为真实安全问题（**非误报**）
+- `claude:user:baoyu-post-to-wechat` / `baoyu-post-to-x`: scripts 含 `curl|sh`
+- `claude:user:careful`: `bin/check-careful.sh` 含 `rm -rf /`
+- `claude:user:gstack`: 测试文件含 `rm -rf /` + 脚本含 `curl|sh`
+- `claude:user:webapp-testing`: `scripts/with_server.py` 含 `subprocess shell=True`
+
+这些是**真实需要 skill 用户知情**的高危模式——质量门把它们打 blocked 是正确的。是否允许使用由用户自行决定（未来 dashboard 提供 override 开关）。
+
+### 触地调参（与第一版 verify.py 的差异，记录避免回退）
+1. **排除依赖/构建/缓存目录**（`EXCLUDED_DIR_PARTS`）：
+   第一版扫 `node_modules/` 致 `brave-search` 误报 35+ hit。
+   加排除后误报清零。包含：`node_modules / vendor / .venv / venv / __pycache__ / .pytest_cache / .mypy_cache / dist / build / out / target / .git / .tox`。
+2. **`exec` / `eval` 加 negative lookbehind**：
+   第一版 `\beval\s*\(` 把 JS `regex.exec()` / `child_process.exec()` 也匹配。
+   改 `(?<![\w.])eval\s*\(` / `(?<![\w.])exec\s*\(` 后只匹配顶层调用。
+3. **不扫 `.md / .txt` 等文档**（`SCANNABLE_EXTS` 白名单）：
+   文档表述意图，脚本承载执行；混淆二者会让教学型 skill 大量误判。
+   测试 `test_danger_in_md_does_not_trigger` 锁住此行为。
+
+### 评分公式
+`score = max(0, 100 − 50×error − 15×warn)`，下限 0。
+- verified = 0 error + 0 warn （100 分）
+- needs-review = 0 error + ≥1 warn （70-85 常见）
+- blocked = ≥1 error
+
+---
+
 ## 2026-05-24 · 仓库上 GitHub
 
 - **GitHub 名头核查**：`skillcli` 在 GitHub 完全空地——22 个 `q=skillcli+in:name` 结果全是 `skillclip/skillclimb/skillclient/skillclicker/...` 等更长变体，**无人占有精确 `skillcli`**；`Edward4226/skillcli` 验证 404。
