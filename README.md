@@ -37,12 +37,14 @@ skillcli rules validate  # 阶段 6
 ## 进度
 
 - [x] 阶段 0：脚手架（pyproject / LICENSE / CLI stub / DECISIONS）
-- [ ] 阶段 1：发现与注册（discovery + registry + adapters/claude_code）
+- [ ] 阶段 1：发现与注册（discovery + registry + adapters：**Claude + Codex 同步**）
 - [ ] 阶段 2：质量门（verify：结构 + 触发器 lint + 安全扫描）
-- [ ] 阶段 3：用量（usage：transcript 解析 + 死重 + 规则建议草案）
+- [ ] 阶段 3：用量（usage：Claude JSONL **+** Codex transcript 双解析 + 死重 + 规则建议草案）
 - [ ] 阶段 4：看板 P0（dashboard：清单 + 徽章 + 死重 + 用量）
 - [ ] 阶段 5：蒸馏票 `ticket-codex-maxxing/`（AGENTS.md / CLAUDE.md / 3 个 skill）
-- [ ] 阶段 6（P1）：规则引擎 + hook + 真机触发率实验（go/no-go 关口）
+- [ ] 阶段 6（P1）：规则引擎 + hooks（**Claude + Codex 双套**）+ 真机触发率实验（go/no-go 关口）
+
+> Codex 适配为何在 P1 而非 SPEC 原定的 P2：见 [DECISIONS.md](DECISIONS.md) 2026-05-24 · Q5 反转。
 
 ## 设计信条
 

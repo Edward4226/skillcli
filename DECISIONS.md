@@ -67,6 +67,37 @@
 
 ---
 
+## 2026-05-24 · Q3 / Q5 用户拍板
+
+### Q3 = 确认默认 `--no-llm`
+- `skillcli scan` 一句话摘要走 description 首句（零配置、可离线、零密钥）。
+- `--llm` 显式开启更精确的 LLM 摘要版本。
+
+### Q5 反转：Codex 适配从 P2 stub 提前到 **P0/P1**
+- **理由（用户）**：Codex 用户体量较大，等到 P2 真装会错过早期采纳曲线。
+- **与 SPEC §14 的偏离**（SPEC.md 冻结副本不动，以本条为准）：
+  - **阶段 1**：`adapters/claude_code.py` 与 `adapters/codex.py` **同时实装**；discovery / registry 同时扫描两套路径。
+  - **阶段 3 usage**：解析 Claude JSONL **与** Codex transcript 两套格式（Codex 的会话存储确切路径与字段形状由实现期确认，记入本文件）。
+  - **阶段 6 hooks**：`hooks/claude/enforce_skill.py` **与** `hooks/codex/enforce_skill.py` **同步**实装。
+  - **P2 剩余**：`PreToolUse` 拦截、上下文 X 光、MCP 体积审计（与 Codex 无关的扩张项）。
+- README.md 的「进度」段同步更新，把"两个 adapter / 两套 hook"明示在 P1。
+
+---
+
+## 2026-05-24 · skillcli-dev 私仓立项
+
+- **目的**：放内部材料、进行中文档、策略与计划等"不适合公开"的内容。
+  与公开 `skillcli` 仓双轨：公开仓只放可发布的实现 + 用户文档；私仓放决策路径、竞品分析、原型遗物、运营策略。
+- **状态**：`gh repo create skillcli-dev --private`（owner = Edward4226）。
+- **候选首批内容**（待用户拍板才搬，**不**先斩后奏）：
+  - `/Users/edward/for claude/Claude-Code-启动移交手册.md`（本会话起源）
+  - `/Users/edward/for claude/Agent驱动开源项目-冲星与赞助策略.md`
+  - `/Users/edward/for claude/skill-control-layer/01-MVP规格.md` `02-竞品差异.md` `03-原型验证记录.md`
+  - `/Users/edward/for claude/skill-control-layer/prototype/`（三支柱原型脚本与金样本，阶段 1–3 的来源）
+- **未确认前**，不复制/不推送任何 `/Users/edward/for claude/` 内容。
+
+---
+
 ## 2026-05-24 · 仓库上 GitHub
 
 - **GitHub 名头核查**：`skillcli` 在 GitHub 完全空地——22 个 `q=skillcli+in:name` 结果全是 `skillclip/skillclimb/skillclient/skillclicker/...` 等更长变体，**无人占有精确 `skillcli`**；`Edward4226/skillcli` 验证 404。
