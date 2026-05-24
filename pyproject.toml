@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "skill-control-plane"
+version = "0.0.1"
+description = "本地 skill 库的控制平面：确定性规则 + 质量门 + 用量闭环。让该用的 skill 在该用的场景每次都触发。"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+authors = [{ name = "Edward" }]
+keywords = ["claude-code", "codex", "skills", "hooks", "agents", "control-plane"]
+classifiers = [
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Development Status :: 3 - Alpha",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+llm = []
+yaml = ["pyyaml>=6"]
+
+[project.scripts]
+skillcli = "skill_control_plane.cli:main"
+
+[project.urls]
+"Source" = "https://github.com/Edward4226/skillcli"
+"Spec" = "./SPEC.md"
+
+[tool.setuptools.packages.find]
+include = ["skill_control_plane*"]
+exclude = ["tests*", "examples*", "hooks*", "ticket-codex-maxxing*"]
