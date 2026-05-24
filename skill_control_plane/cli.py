@@ -136,12 +136,14 @@ def _cmd_usage(args: argparse.Namespace) -> int:
     from .usage import (
         DEFAULT_SUGGESTIONS_PATH,
         aggregate_stats,
+        count_implicit_mentions,
         mine_rule_suggestions,
         parse_claude_invocations,
         save_suggestions,
     )
 
-    invocations = list(parse_claude_invocations(ClaudeCodeAdapter(), since_days=args.since))
+    claude_a = ClaudeCodeAdapter()
+    invocations = list(parse_claude_invocations(claude_a, since_days=args.since))
     stats = aggregate_stats(invocations)
     suggestions = mine_rule_suggestions(invocations)
 
@@ -150,26 +152,35 @@ def _cmd_usage(args: argparse.Namespace) -> int:
         print("注册表为空。请先跑 `skillcli scan`。", file=sys.stderr)
         return 1
 
+    # 隐式信号（Phase 4）：text-scan Claude skill 名在 assistant text 中出现的会话数。
+    # 启发式、假阳性高，dashboard 加 disclaimer。
+    claude_names = [e.name for e in entries.values() if e.tool == "claude"]
+    implicit = count_implicit_mentions(claude_a, claude_names, since_days=args.since)
+
     for sid, e in entries.items():
         if e.tool == "claude":
             s = stats.get(e.name)
+            imp = implicit.get(e.name, 0)
             if s:
                 entries[sid].usage = reg.UsageState(
                     invocations=s.invocations,
                     last_used=s.last_used,
                     never_used=False,
                     source="claude_jsonl",
+                    implicit_mentions=imp,
                 )
             else:
                 entries[sid].usage = reg.UsageState(
-                    invocations=0, last_used=None, never_used=True,
+                    invocations=0, last_used=None, never_used=(imp == 0),
                     source="claude_jsonl",
+                    implicit_mentions=imp,
                 )
         elif e.tool == "codex":
-            # 诚实降级（Q5/Phase 1 侦察决定）：Codex 无离散 Skill 调用
+            # 诚实降级（Q5/Phase 1 侦察决定）：Codex 无离散 Skill 调用，
+            # 隐式信号同样不靠谱（Codex transcript 结构完全不同），先一律 0。
             entries[sid].usage = reg.UsageState(
                 invocations=0, last_used=None, never_used=True,
-                source="unsupported",
+                source="unsupported", implicit_mentions=0,
             )
     reg.save(entries)
     save_suggestions(suggestions)
@@ -180,15 +191,30 @@ def _cmd_usage(args: argparse.Namespace) -> int:
         f"共 {len(invocations)} 次 skill 调用，覆盖 {len(stats)} 个不同 skill。\n"
     )
     if stats:
-        print("Top 10 用量：")
+        print("Top 10 显式 Skill 调用：")
         for s in sorted(stats.values(), key=lambda x: -x.invocations)[:10]:
             print(f"  {s.invocations:5d}  {s.skill_name}")
         print()
 
+    # 隐式信号 top
+    nonzero_implicit = sorted(
+        [(name, n) for name, n in implicit.items() if n > 0],
+        key=lambda kv: -kv[1],
+    )
+    if nonzero_implicit:
+        print(f"Top 10 隐式提及（text-scan 启发式，≥5 字符名）：")
+        for name, n in nonzero_implicit[:10]:
+            print(f"  {n:5d}  {name}")
+        print()
+
     used_names = set(stats.keys())
+    # 死重：显式 + 隐式都 0 才算
+    nonempty_implicit = {n for n, c in implicit.items() if c > 0}
     dead_claude = [
         e for e in entries.values()
-        if e.tool == "claude" and e.name not in used_names
+        if e.tool == "claude"
+        and e.name not in used_names
+        and e.name not in nonempty_implicit
     ]
     if dead_claude:
         print(f"💀 死重（Claude 侧，{args.since} 天内从未调用）：{len(dead_claude)} 个")
@@ -220,8 +246,14 @@ def _cmd_rules(args: argparse.Namespace) -> int:
     return _not_implemented(f"rules {args.action}", 6)
 
 
-def _cmd_dashboard(_args: argparse.Namespace) -> int:
-    return _not_implemented("dashboard", 4)
+def _cmd_dashboard(args: argparse.Namespace) -> int:
+    from .dashboard.server import serve
+    try:
+        serve(port=args.port, open_browser=not args.no_browser)
+        return 0
+    except OSError as e:
+        print(f"启动失败：{e}（端口可能被占；试 --port <其它>）", file=sys.stderr)
+        return 1
 
 
 def _cmd_doctor(_args: argparse.Namespace) -> int:
@@ -275,6 +307,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("dashboard", help="启本地只读看板（阶段 4）")
     s.add_argument("--port", type=int, default=7878)
+    s.add_argument("--no-browser", action="store_true",
+                   help="不自动打开浏览器（CI / 远端用）")
     s.set_defaults(func=_cmd_dashboard)
 
     s = sub.add_parser("doctor", help="一键体检（阶段 4）")

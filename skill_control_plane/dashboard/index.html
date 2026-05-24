@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>skillcli · 控制平面看板</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    /* ------------------------------ tokens ------------------------------ */
+    :root {
+      --bg: #f6f8fb;
+      --card: #ffffff;
+      --border: #e2e8f0;
+      --border-strong: #cbd5e1;
+      --text: #0f172a;
+      --text-soft: #475569;
+      --muted: #94a3b8;
+      --primary: #2563eb;
+      --primary-soft: #eff6ff;
+      --verified: #16a34a;
+      --verified-soft: #dcfce7;
+      --review: #d97706;
+      --review-soft: #fef3c7;
+      --blocked: #dc2626;
+      --blocked-soft: #fee2e2;
+      --dead: #94a3b8;
+      --dup: #7c3aed;
+      --dup-soft: #ede9fe;
+      --shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 1px 2px rgba(15, 23, 42, 0.06);
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+                    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+    code {
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+      font-size: 0.92em;
+      background: #f1f5f9;
+      padding: 1px 6px;
+      border-radius: 3px;
+    }
+    button { font-family: inherit; cursor: pointer; }
+
+    /* ------------------------------ header ------------------------------ */
+    header {
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      padding: 18px 32px;
+      position: sticky; top: 0; z-index: 10;
+      box-shadow: var(--shadow);
+    }
+    .header-row { display: flex; align-items: center; justify-content: space-between; max-width: 1400px; margin: 0 auto; }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand-logo { font-size: 24px; }
+    .brand-title { margin: 0; font-size: 18px; font-weight: 600; }
+    .brand-tag { color: var(--muted); font-size: 12px; margin-top: 2px; }
+    .header-meta { display: flex; align-items: center; gap: 16px; color: var(--text-soft); font-size: 12px; }
+    .refresh-btn {
+      padding: 6px 14px; border: 1px solid var(--border); background: var(--card);
+      color: var(--text); border-radius: 6px; font-size: 13px;
+      transition: all 0.15s;
+    }
+    .refresh-btn:hover { background: var(--primary-soft); border-color: var(--primary); color: var(--primary); }
+
+    /* ------------------------------ layout ------------------------------ */
+    .container { max-width: 1400px; margin: 0 auto; padding: 24px 32px 48px; }
+    .section-h { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase;
+                  letter-spacing: 0.06em; margin: 0 0 12px; }
+
+    /* ------------------------------ summary cards ------------------------------ */
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+    .stat {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px 18px;
+      box-shadow: var(--shadow);
+      transition: transform 0.1s;
+    }
+    .stat:hover { transform: translateY(-1px); }
+    .stat-label { color: var(--text-soft); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+    .stat-value { font-size: 30px; font-weight: 700; margin-top: 6px; line-height: 1; }
+    .stat-sub { color: var(--muted); font-size: 12px; margin-top: 6px; }
+    .stat.alert .stat-value { color: var(--blocked); }
+    .stat.warn .stat-value { color: var(--review); }
+    .stat.ok .stat-value { color: var(--verified); }
+
+    /* ------------------------------ charts ------------------------------ */
+    .charts {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+    @media (max-width: 900px) { .charts { grid-template-columns: 1fr; } }
+    .chart-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px;
+      box-shadow: var(--shadow);
+    }
+    .chart-card h3 { margin: 0 0 14px; font-size: 13px; color: var(--text-soft); font-weight: 600; }
+    .chart-wrap { position: relative; height: 200px; }
+
+    /* ------------------------------ disclaimer ------------------------------ */
+    .disclaimer {
+      background: var(--review-soft);
+      border: 1px solid #fcd34d;
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin-bottom: 24px;
+      font-size: 13px;
+      color: #78350f;
+      line-height: 1.6;
+    }
+    .disclaimer strong { color: var(--review); }
+
+    /* ------------------------------ skill list ------------------------------ */
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      box-shadow: var(--shadow);
+      margin-bottom: 24px;
+      overflow: hidden;
+    }
+    .panel-header {
+      display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .panel-title { margin: 0; font-size: 15px; font-weight: 600; }
+    .panel-title-count { color: var(--muted); font-weight: 400; margin-left: 8px; }
+    .filter-bar { display: flex; flex-wrap: wrap; gap: 6px; }
+    .filter-btn {
+      padding: 5px 11px; border: 1px solid var(--border); background: var(--card);
+      color: var(--text-soft); border-radius: 14px; font-size: 12px;
+      transition: all 0.12s;
+    }
+    .filter-btn:hover { border-color: var(--primary); color: var(--primary); }
+    .filter-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+    .search-input {
+      padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px;
+      font-size: 13px; min-width: 200px; font-family: inherit;
+    }
+    .search-input:focus { outline: none; border-color: var(--primary); }
+
+    .skill-rows { max-height: 600px; overflow-y: auto; }
+    .skill-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto auto auto auto;
+      gap: 16px; align-items: center;
+      padding: 12px 20px;
+      border-bottom: 1px solid #f1f5f9;
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+    .skill-row:hover { background: #f8fafc; }
+    .skill-row.expanded { background: var(--primary-soft); }
+    .skill-row:last-child { border-bottom: none; }
+    .skill-info { min-width: 0; }
+    .skill-name { font-weight: 500; font-size: 14px; }
+    .skill-summary { color: var(--text-soft); font-size: 12px; margin-top: 2px;
+                      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .badge {
+      display: inline-block; padding: 2px 9px; border-radius: 10px;
+      font-size: 11px; font-weight: 600; letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+    .badge-verified { background: var(--verified-soft); color: var(--verified); }
+    .badge-needs-review { background: var(--review-soft); color: var(--review); }
+    .badge-blocked { background: var(--blocked-soft); color: var(--blocked); }
+    .badge-unverified { background: #f1f5f9; color: var(--muted); }
+    .badge-dup { background: var(--dup-soft); color: var(--dup); }
+
+    .tool-chip {
+      padding: 2px 7px; border-radius: 8px; font-size: 11px; font-weight: 500;
+      background: #e0f2fe; color: #0369a1;
+    }
+    .tool-chip.codex { background: #fef3c7; color: #92400e; }
+
+    .usage-cell { font-size: 12px; color: var(--text-soft); display: flex; gap: 6px; align-items: center; }
+    .usage-explicit { color: var(--verified); font-weight: 600; }
+    .usage-implicit { color: var(--dup); }
+    .usage-na { color: var(--muted); }
+
+    .freshness { font-size: 11px; color: var(--muted); }
+
+    /* row detail expansion */
+    .skill-detail {
+      padding: 14px 20px 16px;
+      background: #fafbfc;
+      border-bottom: 1px solid #f1f5f9;
+      font-size: 13px;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+    }
+    .detail-block h4 { margin: 0 0 6px; font-size: 12px; color: var(--text-soft); text-transform: uppercase; letter-spacing: 0.04em; }
+    .detail-block .kv { margin-bottom: 4px; color: var(--text-soft); }
+    .detail-block .kv b { color: var(--text); font-weight: 500; }
+
+    /* ------------------------------ callout sections ------------------------------ */
+    .callouts { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media (max-width: 1100px) { .callouts { grid-template-columns: 1fr; } }
+    .callout {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-left-width: 3px;
+      border-radius: 8px;
+      padding: 16px 18px;
+      box-shadow: var(--shadow);
+    }
+    .callout.alert { border-left-color: var(--blocked); }
+    .callout.dup { border-left-color: var(--dup); }
+    .callout.dead { border-left-color: var(--muted); }
+    .callout.tip { border-left-color: var(--primary); }
+    .callout h3 { margin: 0 0 6px; font-size: 14px; font-weight: 600; }
+    .callout-tag { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+    .callout-item {
+      padding: 10px 12px; border-radius: 6px; margin-bottom: 8px; font-size: 13px;
+    }
+    .callout.alert .callout-item { background: var(--blocked-soft); }
+    .callout.dup .callout-item { background: var(--dup-soft); }
+    .callout.dead .callout-item { background: #f8fafc; }
+    .callout.tip .callout-item { background: var(--primary-soft); }
+    .callout-item code { background: rgba(255,255,255,0.5); }
+    .callout-more { color: var(--muted); font-size: 12px; padding: 4px 12px; }
+
+    /* ------------------------------ empty / loading ------------------------------ */
+    .empty {
+      padding: 36px; text-align: center; color: var(--muted); font-size: 13px;
+    }
+    .empty code { background: var(--card); }
+    #toast {
+      position: fixed; bottom: 24px; right: 24px;
+      padding: 12px 18px; background: var(--text); color: white;
+      border-radius: 6px; font-size: 13px;
+      transform: translateY(80px); opacity: 0;
+      transition: all 0.25s;
+    }
+    #toast.show { transform: translateY(0); opacity: 1; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-row">
+      <div class="brand">
+        <span class="brand-logo">📊</span>
+        <div>
+          <div class="brand-title">skillcli · 控制平面看板</div>
+          <div class="brand-tag">本地只读 · 100% offline · 不写云端</div>
+        </div>
+      </div>
+      <div class="header-meta">
+        <span id="last-scan">加载中...</span>
+        <button class="refresh-btn" onclick="loadAll(true)">🔄 刷新</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <div id="content">
+      <div class="empty">⏳ 加载数据中...</div>
+    </div>
+  </main>
+
+  <div id="toast"></div>
+
+  <script>
+    // ---------------- state ----------------
+    let regData = {skills: {}, saved_at: null};
+    let sugData = {suggestions: []};
+    let currentFilter = 'all';
+    let currentSearch = '';
+    let expandedId = null;
+    const charts = {};
+
+    // ---------------- bootstrap ----------------
+    async function loadAll(notify = false) {
+      try {
+        const [reg, sug] = await Promise.all([
+          fetch('/api/registry.json').then(r => r.json()),
+          fetch('/api/suggestions.json').then(r => r.json()),
+        ]);
+        regData = reg || {skills: {}};
+        sugData = sug || {suggestions: []};
+        render();
+        if (notify) toast('已刷新');
+      } catch (e) {
+        document.getElementById('content').innerHTML =
+          `<div class="empty">❌ 加载失败：${escape(String(e))}<br><br>请确认 skillcli dashboard 在运行中。</div>`;
+      }
+    }
+
+    function getSkills() {
+      return Object.values(regData.skills || {});
+    }
+
+    // ---------------- render ----------------
+    function render() {
+      const skills = getSkills();
+      if (skills.length === 0) {
+        document.getElementById('content').innerHTML = `
+          <div class="empty">
+            🌱 注册表是空的。<br><br>
+            请先在终端运行：<code>skillcli scan</code> 发现本地 skill；<br>
+            然后 <code>skillcli verify --all</code> 跑质量门；<br>
+            然后 <code>skillcli usage</code> 算用量。<br>
+            最后回到这里 🔄 刷新。
+          </div>`;
+        return;
+      }
+      document.getElementById('content').innerHTML = `
+        <section class="summary" id="summary"></section>
+        <section class="charts">
+          <div class="chart-card"><h3>按 verify 徽章分布</h3><div class="chart-wrap"><canvas id="badge-chart"></canvas></div></div>
+          <div class="chart-card"><h3>按工具 / scope 分布</h3><div class="chart-wrap"><canvas id="tool-chart"></canvas></div></div>
+        </section>
+        <div class="disclaimer">
+          <strong>⚠️ 用量信号说明</strong>　Claude 的显式 <code>Skill</code> tool_use 在真实使用中很<strong>稀疏</strong>——
+          多数 skill 是 description 加载进 context 后被<strong>隐式使用</strong>（模型按指引行动，不显式 <code>Skill()</code> 调用）。
+          本看板同时显示<strong>显式调用</strong>（精确）与<strong>隐式提及</strong>（text-scan 启发式，
+          仅对 ≥5 字符的 skill 名按词边界匹配，可能误报）。
+          Codex skill 的用量统计当前不支持（标 <code>—</code>，Phase 6 再设计）。
+        </div>
+        ${renderSummaryHTML()}
+        ${renderPanelHTML()}
+        ${renderCalloutsHTML()}
+      `;
+      document.getElementById('summary').innerHTML = renderSummaryHTML();
+      drawCharts();
+      attachEvents();
+      updateLastScan();
+    }
+
+    function updateLastScan() {
+      const el = document.getElementById('last-scan');
+      if (regData.saved_at) {
+        const d = new Date(regData.saved_at);
+        el.textContent = '上次扫描: ' + d.toLocaleString('zh-CN');
+      } else {
+        el.textContent = '上次扫描: 未知';
+      }
+    }
+
+    // ---------------- summary ----------------
+    function renderSummaryHTML() {
+      const skills = getSkills();
+      const total = skills.length;
+      const verified = skills.filter(s => s.verify.badge === 'verified').length;
+      const review = skills.filter(s => s.verify.badge === 'needs-review').length;
+      const blocked = skills.filter(s => s.verify.badge === 'blocked').length;
+      const claudeN = skills.filter(s => s.tool === 'claude').length;
+      const codexN = skills.filter(s => s.tool === 'codex').length;
+      const explicitUsed = skills.filter(s => (s.usage.invocations || 0) > 0).length;
+      const implicitUsed = skills.filter(s => (s.usage.implicit_mentions || 0) > 0).length;
+      const dead = skills.filter(s =>
+        s.usage.source === 'claude_jsonl' &&
+        (s.usage.invocations || 0) === 0 &&
+        (s.usage.implicit_mentions || 0) === 0
+      ).length;
+      const dups = skills.filter(s => s.duplicate_of).length;
+      const pct = (n) => total === 0 ? 0 : Math.round(n / total * 100);
+
+      return `
+        <div class="stat">
+          <div class="stat-label">总 Skill</div>
+          <div class="stat-value">${total}</div>
+          <div class="stat-sub">Claude ${claudeN} · Codex ${codexN}</div>
+        </div>
+        <div class="stat ok">
+          <div class="stat-label">✅ Verified</div>
+          <div class="stat-value">${verified}</div>
+          <div class="stat-sub">${pct(verified)}% 可被规则绑定</div>
+        </div>
+        <div class="stat warn">
+          <div class="stat-label">⚠️ Needs Review</div>
+          <div class="stat-value">${review}</div>
+          <div class="stat-sub">${pct(review)}% 有 lint 警告</div>
+        </div>
+        <div class="stat alert">
+          <div class="stat-label">❌ Blocked</div>
+          <div class="stat-value">${blocked}</div>
+          <div class="stat-sub">安全/结构问题</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">📈 用量信号</div>
+          <div class="stat-value">${explicitUsed} <span style="font-size:14px;color:var(--muted);">+ ${implicitUsed}</span></div>
+          <div class="stat-sub">显式 / 隐式（30 天）</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">💀 死重 / 🔁 重复</div>
+          <div class="stat-value">${dead} <span style="font-size:18px;color:var(--muted);"> / ${dups}</span></div>
+          <div class="stat-sub">建议清理 / 跨工具同名</div>
+        </div>
+      `;
+    }
+
+    // ---------------- charts ----------------
+    function drawCharts() {
+      const skills = getSkills();
+      const byBadge = {verified: 0, 'needs-review': 0, blocked: 0, unverified: 0};
+      skills.forEach(s => { byBadge[s.verify.badge] = (byBadge[s.verify.badge] || 0) + 1; });
+      drawChart('badge-chart', {
+        labels: ['Verified', 'Needs Review', 'Blocked', 'Unverified'],
+        datasets: [{
+          data: [byBadge.verified, byBadge['needs-review'], byBadge.blocked, byBadge.unverified],
+          backgroundColor: ['#16a34a', '#d97706', '#dc2626', '#cbd5e1'],
+          borderColor: '#ffffff', borderWidth: 2,
+        }],
+      });
+
+      const toolScope = {};
+      skills.forEach(s => {
+        const k = `${s.tool} · ${s.scope}`;
+        toolScope[k] = (toolScope[k] || 0) + 1;
+      });
+      drawChart('tool-chart', {
+        labels: Object.keys(toolScope),
+        datasets: [{
+          data: Object.values(toolScope),
+          backgroundColor: ['#2563eb', '#f59e0b', '#10b981', '#a855f7', '#ec4899'],
+          borderColor: '#ffffff', borderWidth: 2,
+        }],
+      });
+    }
+
+    function drawChart(canvasId, data) {
+      const ctx = document.getElementById(canvasId);
+      if (!ctx) return;
+      if (charts[canvasId]) charts[canvasId].destroy();
+      charts[canvasId] = new Chart(ctx, {
+        type: 'doughnut',
+        data,
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'right', labels: { font: { size: 12 } } },
+          },
+          cutout: '60%',
+        },
+      });
+    }
+
+    // ---------------- skill list panel ----------------
+    function renderPanelHTML() {
+      const skills = filteredSorted();
+      return `
+        <div class="panel">
+          <div class="panel-header">
+            <h2 class="panel-title">Skill 库<span class="panel-title-count">${skills.length} / ${getSkills().length}</span></h2>
+            <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
+              <input class="search-input" id="search" placeholder="搜索 skill 名 / 摘要..." value="${escape(currentSearch)}">
+              <div class="filter-bar" id="filter-bar"></div>
+            </div>
+          </div>
+          <div class="skill-rows" id="skill-rows">${renderSkillRows(skills)}</div>
+        </div>
+      `;
+    }
+
+    function filteredSorted() {
+      const skills = getSkills().filter(matchFilter).filter(matchSearch);
+      const badgeRank = {blocked: 0, 'needs-review': 1, verified: 2, unverified: 3};
+      skills.sort((a, b) => {
+        // 1. blocked / needs-review 先
+        const r = (badgeRank[a.verify.badge] ?? 9) - (badgeRank[b.verify.badge] ?? 9);
+        if (r !== 0) return r;
+        // 2. 用量降序（explicit + implicit）
+        const ua = (a.usage.invocations || 0) * 10 + (a.usage.implicit_mentions || 0);
+        const ub = (b.usage.invocations || 0) * 10 + (b.usage.implicit_mentions || 0);
+        if (ua !== ub) return ub - ua;
+        // 3. 字母序
+        return a.name.localeCompare(b.name);
+      });
+      return skills;
+    }
+
+    function matchFilter(s) {
+      switch (currentFilter) {
+        case 'all': return true;
+        case 'verified':
+        case 'needs-review':
+        case 'blocked':
+          return s.verify.badge === currentFilter;
+        case 'used':
+          return (s.usage.invocations || 0) > 0 || (s.usage.implicit_mentions || 0) > 0;
+        case 'dead':
+          return s.usage.source === 'claude_jsonl'
+              && (s.usage.invocations || 0) === 0
+              && (s.usage.implicit_mentions || 0) === 0;
+        case 'duplicate':
+          return !!s.duplicate_of;
+        case 'claude':
+        case 'codex':
+          return s.tool === currentFilter;
+        default: return true;
+      }
+    }
+    function matchSearch(s) {
+      if (!currentSearch) return true;
+      const q = currentSearch.toLowerCase();
+      return (s.name || '').toLowerCase().includes(q) ||
+             (s.summary || '').toLowerCase().includes(q);
+    }
+
+    function renderSkillRows(skills) {
+      if (skills.length === 0) {
+        return '<div class="empty">没有匹配的 skill。试试改 filter / 搜索词。</div>';
+      }
+      const limit = 200;
+      const shown = skills.slice(0, limit);
+      let html = shown.map(s => {
+        const isExp = (s.id === expandedId);
+        return `
+          <div class="skill-row ${isExp ? 'expanded' : ''}" data-id="${escape(s.id)}">
+            <div class="skill-info">
+              <div class="skill-name">${escape(s.name)} ${s.duplicate_of ? '<span class="badge badge-dup">🔁 dup</span>' : ''}</div>
+              <div class="skill-summary">${escape(s.summary || '(no summary)')}</div>
+            </div>
+            <span class="badge badge-${s.verify.badge}">${s.verify.badge}</span>
+            <span class="tool-chip ${s.tool}">${s.tool} · ${s.scope}</span>
+            <div class="usage-cell" title="explicit Skill() calls / implicit name mentions (last 30d)">
+              ${usageCellHTML(s)}
+            </div>
+            <div class="freshness" title="last modified">${freshnessLabel(s.freshness_days)}</div>
+            <div style="color: var(--muted); font-size: 12px;">${isExp ? '▴' : '▾'}</div>
+          </div>
+          ${isExp ? renderDetail(s) : ''}
+        `;
+      }).join('');
+      if (skills.length > limit) {
+        html += `<div class="callout-more">显示前 ${limit} 条；用 filter / 搜索缩小范围看其余 ${skills.length - limit} 条。</div>`;
+      }
+      return html;
+    }
+
+    function usageCellHTML(s) {
+      if (s.usage.source === 'unsupported') {
+        return `<span class="usage-na">—</span>`;
+      }
+      const ex = s.usage.invocations || 0;
+      const im = s.usage.implicit_mentions || 0;
+      return `<span class="usage-explicit">${ex}</span><span class="usage-na">/</span><span class="usage-implicit">${im}</span>`;
+    }
+
+    function freshnessLabel(days) {
+      if (days == null) return '—';
+      if (days === 0) return '今日';
+      if (days < 30) return days + 'd';
+      if (days < 365) return Math.round(days / 30) + 'mo';
+      return Math.round(days / 365) + 'y';
+    }
+
+    function renderDetail(s) {
+      const kws = (s.trigger_keywords || []).join(', ') || '(none)';
+      const verifyKV = `
+        <div class="kv">badge: <b>${s.verify.badge}</b> · score <b>${s.verify.score || 0}/100</b></div>
+        <div class="kv">last_run: <b>${s.verify.last_run || '—'}</b></div>
+      `;
+      const usageKV = `
+        <div class="kv">source: <b>${s.usage.source}</b></div>
+        <div class="kv">explicit invocations: <b>${s.usage.invocations || 0}</b> · last_used <b>${s.usage.last_used || '—'}</b></div>
+        <div class="kv">implicit mentions: <b>${s.usage.implicit_mentions || 0}</b> （text-scan，启发式）</div>
+      `;
+      return `
+        <div class="skill-detail">
+          <div class="detail-block">
+            <h4>verify</h4>${verifyKV}
+            <h4 style="margin-top:10px;">trigger keywords</h4>
+            <div class="kv"><b>${escape(kws)}</b></div>
+          </div>
+          <div class="detail-block">
+            <h4>usage (30d)</h4>${usageKV}
+            <h4 style="margin-top:10px;">path</h4>
+            <div class="kv"><code style="font-size:11px;">${escape(s.path || '')}</code></div>
+            ${s.duplicate_of ? `<div class="kv" style="color:var(--dup);margin-top:6px;">🔁 duplicate of <b>${escape(s.duplicate_of)}</b></div>` : ''}
+          </div>
+        </div>
+      `;
+    }
+
+    // ---------------- callouts ----------------
+    function renderCalloutsHTML() {
+      const skills = getSkills();
+      const blocked = skills.filter(s => s.verify.badge === 'blocked');
+      const dups = skills.filter(s => s.duplicate_of);
+      const dead = skills.filter(s =>
+        s.usage.source === 'claude_jsonl' &&
+        (s.usage.invocations || 0) === 0 &&
+        (s.usage.implicit_mentions || 0) === 0
+      );
+      const sugs = sugData.suggestions || [];
+      return `
+        <div class="callouts">
+          ${calloutHTML('alert', '🚨', '安全告警', blocked.length,
+            '这些 skill 的脚本里有高危模式（curl|sh / rm -rf / shell=True 等）。质量门拦下它们，避免控制平面成攻击面。',
+            blocked.slice(0, 8).map(s => `<div class="callout-item"><b>${escape(s.id)}</b><div style="color:var(--muted);font-size:12px;margin-top:2px;">${escape(s.summary)}</div></div>`),
+            blocked.length > 8 ? `+${blocked.length - 8} 条更多 — 用 filter "blocked" 查看` : ''
+          )}
+          ${calloutHTML('dup', '🔁', '跨工具重复', dups.length,
+            '描述高度重合——同一份内容被 Claude/Codex 两边都装了。重复 skill 让模型选错（context rot 直接来源）。',
+            dups.slice(0, 8).map(s => `<div class="callout-item"><code>${escape(s.id)}</code> → 重复于 <code>${escape(s.duplicate_of)}</code></div>`),
+            dups.length > 8 ? `+${dups.length - 8} 条更多` : ''
+          )}
+          ${calloutHTML('dead', '💀', '死重（30 天无任何信号）', dead.length,
+            '既没显式调用也没隐式提及——可能装完就忘。建议归档/禁用以释放 context 预算。',
+            dead.slice(0, 10).map(s => `<div class="callout-item"><code>${escape(s.id)}</code></div>`),
+            dead.length > 10 ? `+${dead.length - 10} 条更多` : ''
+          )}
+          ${calloutHTML('tip', '📋', '规则建议', sugs.length,
+            '从你的使用模式挖出的"该用某 skill 的场景"草案。Phase 6 会加"一键确认"写进 rules.yaml；当前仅展示。',
+            sugs.slice(0, 8).map(s => `
+              <div class="callout-item">
+                <b>${escape(s.description)}</b>
+                <div style="font-size:12px;color:var(--text-soft);margin-top:4px;">
+                  when <code>cwd_glob = ${escape(s.when_cwd_glob[0])}</code> → require <code>${escape(s.require_skill)}</code>
+                </div>
+              </div>`),
+            sugs.length > 8 ? `+${sugs.length - 8} 条更多` : ''
+          )}
+        </div>
+      `;
+    }
+
+    function calloutHTML(cls, icon, title, count, tag, items, more) {
+      if (count === 0) {
+        return `
+          <div class="callout ${cls}">
+            <h3>${icon} ${title}</h3>
+            <div class="callout-tag">${tag}</div>
+            <div class="empty" style="padding:14px;">✨ 没有发现任何条目。</div>
+          </div>
+        `;
+      }
+      return `
+        <div class="callout ${cls}">
+          <h3>${icon} ${title} <span style="color:var(--muted);font-weight:400;">${count}</span></h3>
+          <div class="callout-tag">${tag}</div>
+          ${items.join('')}
+          ${more ? `<div class="callout-more">${more}</div>` : ''}
+        </div>
+      `;
+    }
+
+    // ---------------- events ----------------
+    function attachEvents() {
+      // filter buttons
+      const filters = [
+        {key: 'all', label: '全部'},
+        {key: 'verified', label: '✅ verified'},
+        {key: 'needs-review', label: '⚠️ needs-review'},
+        {key: 'blocked', label: '❌ blocked'},
+        {key: 'used', label: '📈 used'},
+        {key: 'dead', label: '💀 dead'},
+        {key: 'duplicate', label: '🔁 dup'},
+        {key: 'claude', label: 'Claude'},
+        {key: 'codex', label: 'Codex'},
+      ];
+      const bar = document.getElementById('filter-bar');
+      bar.innerHTML = filters.map(f =>
+        `<button class="filter-btn ${currentFilter === f.key ? 'active' : ''}" data-filter="${f.key}">${f.label}</button>`
+      ).join('');
+      bar.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.onclick = () => { currentFilter = btn.dataset.filter; render(); };
+      });
+
+      // search
+      const search = document.getElementById('search');
+      if (search) {
+        search.addEventListener('input', e => {
+          currentSearch = e.target.value;
+          document.getElementById('skill-rows').innerHTML = renderSkillRows(filteredSorted());
+          attachRowEvents();
+        });
+      }
+
+      attachRowEvents();
+    }
+
+    function attachRowEvents() {
+      document.querySelectorAll('.skill-row').forEach(row => {
+        row.onclick = () => {
+          const id = row.dataset.id;
+          expandedId = (expandedId === id) ? null : id;
+          document.getElementById('skill-rows').innerHTML = renderSkillRows(filteredSorted());
+          attachRowEvents();
+        };
+      });
+    }
+
+    // ---------------- utils ----------------
+    function escape(s) {
+      if (s == null) return '';
+      return String(s).replace(/[&<>"']/g, c => (
+        {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
+      ));
+    }
+
+    function toast(msg) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.classList.add('show');
+      setTimeout(() => el.classList.remove('show'), 1800);
+    }
+
+    loadAll();
+  </script>
+</body>
+</html>

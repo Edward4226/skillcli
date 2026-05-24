@@ -165,6 +165,82 @@ def _parse_iso(ts: str) -> datetime | None:
         return None
 
 
+# ---------- 隐式使用信号（text-scan，Phase 4）----------
+
+import re as _re
+
+
+def count_implicit_mentions(
+    adapter: ClaudeCodeAdapter | None = None,
+    skill_names: list[str] | None = None,
+    *,
+    since_days: int = 30,
+    min_name_len: int = 5,
+) -> dict[str, int]:
+    """统计"skill 名出现在 assistant text 内容里"的会话数（不是字数）。
+
+    **启发式 + 假阳性高**：短名（"pdf" / "browse"）易被普通文本命中。
+    缓解：① 只统计 len ≥ min_name_len 的名；② 词边界匹配；③ 每会话 +1 而非每次出现。
+    用途：作为"显式 Skill tool_use"的补充——Phase 3 真机发现显式调用极稀疏。
+    Dashboard 必须显示 disclaimer。
+    """
+    if skill_names is None:
+        return {}
+    a = adapter or ClaudeCodeAdapter()
+    cutoff = datetime.now(timezone.utc) - timedelta(days=since_days)
+
+    patterns = {
+        name: _re.compile(rf"\b{_re.escape(name)}\b", _re.IGNORECASE)
+        for name in skill_names
+        if len(name) >= min_name_len
+    }
+    counts: dict[str, int] = {name: 0 for name in skill_names}
+    if not patterns:
+        return counts
+
+    for path in a.transcript_files():
+        # 每个 transcript 一个会话；按 session 算 hit
+        session_hit: set[str] = set()
+        try:
+            f = path.open(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        with f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    obj = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                ts = obj.get("timestamp", "")
+                if ts:
+                    d = _parse_iso(ts)
+                    if d is not None and d < cutoff:
+                        continue
+                msg = obj.get("message") or {}
+                if not isinstance(msg, dict) or msg.get("role") != "assistant":
+                    continue
+                content = msg.get("content")
+                if not isinstance(content, list):
+                    continue
+                for blk in content:
+                    if not isinstance(blk, dict) or blk.get("type") != "text":
+                        continue
+                    text = blk.get("text") or ""
+                    if not isinstance(text, str):
+                        continue
+                    for name, pat in patterns.items():
+                        if name in session_hit:
+                            continue
+                        if pat.search(text):
+                            session_hit.add(name)
+        for name in session_hit:
+            counts[name] += 1
+    return counts
+
+
 # ---------- 聚合 ----------
 
 

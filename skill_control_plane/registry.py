@@ -34,6 +34,11 @@ class UsageState:
     # 用量信号来源；Phase 3 加：区分"Claude 离散调用统计"vs"Codex 不支持"vs"未跑过"。
     # 不区分会让 dashboard 把 Codex skill 全标"死重"（误导）。
     source: str = "unknown"     # claude_jsonl / unsupported / unknown
+    # Phase 4 加：text-scan 启发式——skill 名在 assistant text 中按会话计数。
+    # 用于"隐式使用"信号：Claude Skill tool_use 在真实数据中稀疏（DECISIONS Phase 3
+    # 洞察），多数 skill 是 description 加载进 context 后被隐式使用。
+    # 启发式：高假阳性（短名/常见词易误报），dashboard 加 disclaimer。
+    implicit_mentions: int = 0
 
 
 @dataclass
@@ -177,8 +182,11 @@ def load(path: Path = DEFAULT_REGISTRY_PATH) -> dict[str, RegistryEntry]:
 
 def save(entries: dict[str, RegistryEntry], path: Path = DEFAULT_REGISTRY_PATH) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    import time as _t
+    from datetime import datetime as _dt, timezone as _tz
     payload = {
         "version": 1,
+        "saved_at": _dt.now(_tz.utc).isoformat(),    # 看板显示"上次扫描"
         "skills": {sid: asdict(e) for sid, e in entries.items()},
     }
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")

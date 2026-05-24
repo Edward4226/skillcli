@@ -261,6 +261,47 @@ skill 的 description 被加载进 context，模型按指引行动，**不会显
 
 ---
 
+## 2026-05-24 · Phase 4 完成
+
+### 实装
+- `skill_control_plane/usage.py`：`count_implicit_mentions` text-scan 启发式（≥5 字符名、词边界、per-session 计数）
+- `skill_control_plane/registry.py`：`UsageState` 加 `implicit_mentions` 字段；`save()` 加 `saved_at` 时间戳（看板"上次扫描"显示用）
+- `skill_control_plane/cli.py` `_cmd_usage`：同时计算 + 写回 implicit；死重定义=显式 0 + 隐式 0
+- `skill_control_plane/dashboard/{server.py, index.html, __init__.py}`：stdlib http.server + 单文件前端 + Chart.js CDN
+- `skill_control_plane/cli.py` `_cmd_dashboard`：接通，含 `--port` / `--no-browser`
+- `tests/test_usage_implicit.py` (8) + `tests/test_dashboard.py` (6)：覆盖 text-scan 边界 + dashboard 端点协议
+- 累计 39 + 8 + 6 = **53/53 unittest pass**
+
+### 看板设计（普通用户视角）
+按用户要求"极致的可视化和易用性"：
+1. **首屏摘要 6 卡**（总数 / verified / needs-review / blocked / 用量信号 / 死重+重复）——一眼看健康度
+2. **双图**：徽章饼图 + 工具×scope 饼图（Chart.js doughnut）
+3. **黄色 disclaimer**：显式 vs 隐式信号说明 + Codex 不支持说明——用户不会被数据误导
+4. **Skill 列表**：可搜（名/摘要）+ 9 个 filter chip（全部/verified/needs-review/blocked/used/dead/dup/Claude/Codex）+ 点击行展开详情（verify checks + trigger_kw + path + dup 链）
+5. **4 个 callout 区**：安全告警（红） / 跨工具重复（紫） / 死重（灰） / 规则建议（蓝）——把"该看的东西"主动推到用户眼前
+6. 默认排序：blocked → needs-review → verified → unverified，同档按用量降序——最需要决策的先出现
+7. 全部 vanilla JS + 内联 CSS + Chart.js CDN，**零构建链**
+
+### 隐式信号设计
+显式 Skill tool_use 在真实数据中稀疏（Phase 3 洞察），所以加 text-scan 兜底。**关键约束**：
+- 最低名长 5 字符：'pdf'/'sql'/'qa' 这类常见词假阳性极高，必须屏蔽
+- 词边界：'browser' 不应匹配 'browse'
+- per-session 计数：一个会话里多次提到同一 skill 只算 1（避免单 session 灌水）
+- 仅扫 assistant text content：用户 prompt 不算（"我是否要用 X" ≠ X 被用了）
+
+真机验证：本机抓到 `codex 12 / review 5 / frontend-design 1 / guard 1` 等命中——
+全部合理（我们整个 Phase 都在谈 codex；review 也确实在文中出现）。死重从 67 降到 63。
+
+**Disclaimer 永远显示**：在 dashboard 顶部黄条 + 每个 stat-card 的副标题，让用户清楚
+"explicit=精确 / implicit=启发式可能误报"。诚实优先。
+
+### 看板"只读"承诺的硬约束
+- server.py **不实装 `do_POST`**——任何 POST 自动返回 501，HTTP 协议层兜底
+- 测试 `test_post_not_allowed` 锁住此承诺：若未来不小心实装写端点，CI 立即红
+- 规则"一键确认"功能（SPEC §11.1 提及）留给 Phase 6（rules.yaml 与之同期）
+
+---
+
 ## 2026-05-24 · 仓库上 GitHub
 
 - **GitHub 名头核查**：`skillcli` 在 GitHub 完全空地——22 个 `q=skillcli+in:name` 结果全是 `skillclip/skillclimb/skillclient/skillclicker/...` 等更长变体，**无人占有精确 `skillcli`**；`Edward4226/skillcli` 验证 404。

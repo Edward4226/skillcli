@@ -50,7 +50,11 @@ skillcli rules validate  # 阶段 6
     Claude `Skill` 工具调用本就稀疏，多数 skill 是"隐式使用"（context 内被引用、不显式 Skill() 调用）
   - 规则建议引擎按 cwd 集中度挖（≥3 次 + ≥50% 同 cwd → suggest），合成测试验证；真机数据未触阈值
   - 39/39 unittest
-- [ ] 阶段 4：看板 P0（dashboard：清单 + 徽章 + 死重 + 用量）
+- [x] 阶段 4：看板 P0（dashboard：清单 + 徽章 + 死重 + 用量 + 隐式信号）
+  - `skillcli dashboard --port N` 起本地只读 http（stdlib http.server，零依赖）
+  - 单文件 HTML + Chart.js CDN：摘要卡片 · 双图（badge/工具分布）· 可搜可过滤可点击展开的 Skill 列表 · 4 个 callout 区（安全告警/重复/死重/规则建议）· 用量 disclaimer
+  - **隐式信号 (Phase 4 新)**：`count_implicit_mentions` text-scan，≥5 字符名+词边界+ per-session 计数；本机抓到 codex/review/frontend-design/guard 等真实命中
+  - 53/53 unittest（dashboard 端点测真起 http server，不 mock）
 - [ ] 阶段 5：蒸馏票 `ticket-codex-maxxing/`（AGENTS.md / CLAUDE.md / 3 个 skill）
 - [ ] 阶段 6（P1）：规则引擎 + hooks（**Claude + Codex 双套**）+ 真机触发率实验（go/no-go 关口）
 
