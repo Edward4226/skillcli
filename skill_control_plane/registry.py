@@ -55,6 +55,11 @@ class RegistryEntry:
     freshness_days: int | None = None
     duplicate_of: str | None = None
     enabled: bool = True
+    # Phase 4.5：完整 description（不只第一句 summary）。
+    # 让搜索能命中 description body 而不止 name+summary；前端按主题 facet 也用得上。
+    description: str = ""
+    # Phase 4.5：自动 tag（由 tagging.derive_tags 算出，存到 entry 上供前端 facet 用）。
+    tags: list[str] = field(default_factory=list)
 
 
 # ---------- 一句话摘要（--no-llm 默认）----------
@@ -176,6 +181,8 @@ def load(path: Path = DEFAULT_REGISTRY_PATH) -> dict[str, RegistryEntry]:
             freshness_days=body.get("freshness_days"),
             duplicate_of=body.get("duplicate_of"),
             enabled=bool(body.get("enabled", True)),
+            description=body.get("description", ""),
+            tags=list(body.get("tags") or []),
         )
     return out
 
@@ -217,10 +224,17 @@ def build(records: Iterable[SkillRecord]) -> dict[str, RegistryEntry]:
             summary=summary,
             trigger_keywords=kws,
             freshness_days=freshness,
+            description=desc or "",   # Phase 4.5：保留全 description 供搜索 + facet
         )
     for dup_id, canonical_id in find_duplicates(list(entries.values())).items():
         if dup_id in entries:
             entries[dup_id].duplicate_of = canonical_id
+    # Phase 4.5：自动 tag——延迟 import 避免循环依赖
+    try:
+        from . import tagging
+        tagging.assign_tags(entries)
+    except ImportError:
+        pass
     return entries
 
 

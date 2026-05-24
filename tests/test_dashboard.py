@@ -51,15 +51,21 @@ class TestDashboardEndpoints(unittest.TestCase):
         )
 
     def test_index_html_served(self):
-        """GET / → 200 + 含核心 HTML 标记。"""
+        """GET / → 200 + 含核心 UI 元素（防止意外砍掉）。"""
         r = self._get("/")
         self.assertEqual(r.status, 200)
         body = r.read().decode("utf-8")
         self.assertIn("skillcli", body)
-        # 关键 UI 元素必须存在（防止意外砍掉）
-        self.assertIn('id="badge-chart"', body)
-        self.assertIn('id="tool-chart"', body)
+        # 三个 tab（Phase 4.5 重写后的核心心智模型分离）
+        self.assertIn('data-tab="overview"', body)
+        self.assertIn('data-tab="library"', body)
+        self.assertIn('data-tab="issues"', body)
+        # 至少一个 chart canvas
+        self.assertIn('canvas id="badge-chart"', body)
+        # 用量 disclaimer 永远在 Overview tab——诚实优先
         self.assertIn("disclaimer", body)
+        # Chart.js CDN 应在 head
+        self.assertIn("chart.js", body.lower())
 
     def test_health(self):
         r = self._get("/api/health")

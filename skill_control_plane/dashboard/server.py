@@ -31,10 +31,38 @@ class DashboardHandler(http.server.BaseHTTPRequestHandler):
         if self.path == "/api/suggestions.json":
             self._serve_json(self._load_suggestions_raw())
             return
+        if self.path == "/api/tags.json":
+            self._serve_json(self._compute_tags())
+            return
+        if self.path == "/api/issues.json":
+            self._serve_json(self._compute_issues())
+            return
         if self.path == "/api/health":
             self._serve_json({"ok": True})
             return
         self.send_error(404, "not found")
+
+    def _compute_tags(self) -> dict:
+        """全局 tag 表 + 计数（前端 facet 用）。"""
+        from .. import tagging
+        entries = reg.load()
+        global_tags = tagging.assign_tags(entries)    # 也回填到 entries[*].tags
+        return {
+            "version": 1,
+            "tags": [{"name": t, "count": c} for t, c in global_tags],
+        }
+
+    def _compute_issues(self) -> dict:
+        """每个 entry 的 issues 清单 + 严重度统计（前端 Issues tab 用）。"""
+        from .. import issues as iss_mod
+        entries = reg.load()
+        per_entry = iss_mod.compute_all_issues(entries)
+        flat = iss_mod.flatten_issues(per_entry)
+        return {
+            "version": 1,
+            "stats": iss_mod.stats(per_entry),
+            "issues": [i.to_dict() for i in flat],
+        }
 
     # 我们不响应任何 POST/PUT/DELETE——只读看板，按 SPEC §11.1。
 

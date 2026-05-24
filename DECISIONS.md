@@ -302,6 +302,45 @@ skill 的 description 被加载进 context，模型按指引行动，**不会显
 
 ---
 
+## 2026-05-24 · Phase 4.5 完成 — UX 重做（按用户任务切片，不按数据形状切片）
+
+### 起因
+用户指出 Phase 4 看板的根本问题：**筛选机制按"数据字段"切**（badge / tool / scope），不按"用户任务"切。普通用户进来不会想"我要看 badge=verified 的"，而是想"我现在该处理什么"、"我做 X 任务有哪个 skill 能帮我"、"清理掉没用的"。
+
+### 用户画像 → tab 映射
+五个画像浓缩成三个 tab（不强行五等分）：
+- **Overview** = "健康体检者"——一眼看健康分 + 今日 3 件该处理
+- **Library** = "找 skill" + "侦探"——facet 边栏 + 真搜索 + 比较
+- **Issues** = "清理者" + "装维者"——按 issue type 分组 + 每条带 fix 建议
+
+### 新增模块
+- `tagging.py`：词频启发的全局 tag 表（top 15, ≥3 出现，黑名单过滤）。真机得 api/cli/images/files/design/agent/visual/web/markdown/openai/pdf/content/context/build/supports，59/130 skill 至少 1 个 tag。
+  - 真机调参后扩了黑名单（any/asks/creating/user/generates 等高频但无领域信号的词），tag 质量从"凑数"变"真主题"。
+- `issues.py`：把"每个 skill 该让用户操心的事"显式列出来：security/trigger_style/duplicate/dead/stale 五类；high/med/low 三档；每条带 why + how_to_fix。
+  - 触发式失败时附**可执行的"建议改写"模板**——把 skill 的 trigger_keywords 嵌入 "Use this skill when [kws] ..." 模板，不让用户对着错误信息发呆。
+- `registry.RegistryEntry`：加 `description`（全字段，不只首句 summary）和 `tags` 字段；`build()` 末尾自动 `tagging.assign_tags()` 回填。
+- `dashboard/server.py`：加 `/api/tags.json` 与 `/api/issues.json` 两端点（纯函数计算，不存盘）。
+- `dashboard/index.html` **整个重写**：三 tab 架构 + facet 边栏（badge/tool/scope/tag/usage/freshness 各带计数 + 多选 + AND）+ 真搜索（name×3, tag×2, kw×2, summary×1, description×1, id×0.5 加权 + 多 token AND + 高亮）+ Issues tab（按 type 分组，每条带 fix 建议）+ 比较模式（勾 2 → side-by-side diff 弹窗）+ 批量 dry-run（生成可下载 md 报告，**不真改文件**）+ 排序选项。
+- `tests/test_tagging.py` (6) + `tests/test_issues.py` (10) 新增；69/69 unittest pass。
+
+### 真机数据
+- `skillcli verify --all`：66 verified / 59 needs-review / 5 blocked（不变，调参前后稳）
+- `skillcli usage`：1 显式 + 4 隐式（codex / review / guard / baoyu-danger-gemini-web）
+- `/api/issues.json` stats：**190 条 issue 总**——5 high 安全 + 110 med 触发式 + 75 low (59 dead + 16 stale) + 1 duplicate。这是看板能"具象化痛点"的关键素材。
+- `/api/tags.json`：15 个高质量主题 tag，前端 facet 用
+
+### "看板只读"硬约束保持
+`server.py` 仍**不实装 `do_POST`**——比较 / 批量 dry-run 全在前端算，导出 markdown 由 browser 下载，零服务端写。
+Phase 6 真正的"一键确认规则"（写 rules.yaml）才会加 POST 端点，与 rules 引擎同期。
+
+### 仍然没做的，留 Phase 6 / P3
+- LLM 描述自动改写（默认 --no-llm 边界）
+- 语义聚类 tag（同义词合并：pdf / 文档 / document），词频启发的天花板
+- 真实"批量禁用"动作（需要写文件，归 Phase 6）
+- 上下文 X 光 / MCP 体积审计（SPEC §13 P2）
+
+---
+
 ## 2026-05-24 · 仓库上 GitHub
 
 - **GitHub 名头核查**：`skillcli` 在 GitHub 完全空地——22 个 `q=skillcli+in:name` 结果全是 `skillclip/skillclimb/skillclient/skillclicker/...` 等更长变体，**无人占有精确 `skillcli`**；`Edward4226/skillcli` 验证 404。

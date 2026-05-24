@@ -55,6 +55,12 @@ skillcli rules validate  # 阶段 6
   - 单文件 HTML + Chart.js CDN：摘要卡片 · 双图（badge/工具分布）· 可搜可过滤可点击展开的 Skill 列表 · 4 个 callout 区（安全告警/重复/死重/规则建议）· 用量 disclaimer
   - **隐式信号 (Phase 4 新)**：`count_implicit_mentions` text-scan，≥5 字符名+词边界+ per-session 计数；本机抓到 codex/review/frontend-design/guard 等真实命中
   - 53/53 unittest（dashboard 端点测真起 http server，不 mock）
+- [x] 阶段 4.5：UX 重做 — 把"按数据切片"改成"按用户任务切片"
+  - **三 tab 心智分离**：概览（健康分 + 今日 3 件该做）/ Skill 库（facet 边栏 + 真搜索 + 比较）/ 问题清单（按类型分组 + 怎么修建议）
+  - **新模块**：`tagging.py`（词频自动 tag，blacklist 过滤后本机得 15 个高质量主题：api/cli/images/files/design/...） + `issues.py`（每 entry 算 [{severity, type, why, how_to_fix}]）
+  - **registry 扩**：description 全字段入库（搜索能命中正文），tags 字段（前端 facet 用）；server 加 `/api/tags.json` + `/api/issues.json` 两端点
+  - **真机数据**：本机 190 条 issue（5 high 安全 + 110 med 触发式 + 75 low 死重/过期 + 1 重复）；触发式 issue 都附"建议改写模板"
+  - 69/69 unittest
 - [ ] 阶段 5：蒸馏票 `ticket-codex-maxxing/`（AGENTS.md / CLAUDE.md / 3 个 skill）
 - [ ] 阶段 6（P1）：规则引擎 + hooks（**Claude + Codex 双套**）+ 真机触发率实验（go/no-go 关口）
 
