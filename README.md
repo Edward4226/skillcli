@@ -75,3 +75,5 @@ skillcli rules validate  # 阶段 6
 ## License
 
 [MIT](LICENSE)。
+
+架构与模块设计：[ARCHITECTURE.md](ARCHITECTURE.md)。
