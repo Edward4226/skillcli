@@ -20,12 +20,12 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install uv
-        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Install package (editable, system Python)
-        run: |
-          source $HOME/.local/bin/env
-          uv pip install --system --editable .
+        run: uv pip install --system --editable .
 
       - name: Run tests
         run: python -m unittest discover -s tests -v
