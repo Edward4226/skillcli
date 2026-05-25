@@ -1,5 +1,7 @@
 # skill-control-plane
 
+[![Tests](https://github.com/Edward4226/skillcli/actions/workflows/test.yml/badge.svg)](https://github.com/Edward4226/skillcli/actions/workflows/test.yml)
+
 > 你本地 skill 库的**控制平面**：用确定性规则（hook）让该用的 skill 在该用的场景**每次都触发**。
 > 把社区实测的 ~50% 自动触发率推到接近 100%——⚠️ **当前仅逻辑层成立，真机实验是 P1 关口。**
 
