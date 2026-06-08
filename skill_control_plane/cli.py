@@ -243,7 +243,66 @@ def _cmd_usage(args: argparse.Namespace) -> int:
 
 
 def _cmd_rules(args: argparse.Namespace) -> int:
-    return _not_implemented(f"rules {args.action}", 6)
+    from pathlib import Path
+
+    from . import registry as reg
+    from .rules import (
+        RuleContext,
+        RuleParseError,
+        evaluate,
+        find_rules_file,
+        load_rules_path,
+        match_rules,
+        validate_rules,
+    )
+
+    rules_file = Path(args.rules) if args.rules else find_rules_file()
+    if rules_file is None:
+        print(
+            "未找到规则文件。默认查找 ~/.skill-control-plane/rules.json|yaml，"
+            "或用 --rules <path> 指定。",
+            file=sys.stderr,
+        )
+        return 2
+    if not Path(rules_file).is_file():
+        print(f"规则文件不存在：{rules_file}", file=sys.stderr)
+        return 2
+    try:
+        rules = load_rules_path(Path(rules_file))
+    except RuleParseError as e:
+        print(f"规则文件解析失败：{e}", file=sys.stderr)
+        return 1
+
+    if args.action == "validate":
+        entries = reg.load()
+        if not entries:
+            print("注册表为空，无法校验 require.skill。请先跑 `skillcli scan`。",
+                  file=sys.stderr)
+            return 1
+        errors = validate_rules(rules, entries)
+        if errors:
+            print(f"❌ 校验失败（{len(errors)} 条）：", file=sys.stderr)
+            for e in errors:
+                print(f"  - {e}", file=sys.stderr)
+            return 1
+        print(f"✅ {len(rules)} 条规则全部通过校验（引用 skill 均 verified）。")
+        return 0
+
+    # action == "test"：用模拟上下文看命中 + 注入
+    ctx = RuleContext(
+        files=args.files,
+        intent=args.intent,
+        task_type=args.task_type,
+        git_status=args.git_status,
+        dir=args.dir,
+    )
+    matched = match_rules(rules, ctx)
+    if not matched:
+        print("无规则命中（hook 此时会静默，不注入）。")
+        return 0
+    print(f"命中 {len(matched)} 条规则：{', '.join(r.id for r in matched)}\n")
+    print("hook 将注入：\n" + evaluate(rules, ctx))
+    return 0
 
 
 def _cmd_dashboard(args: argparse.Namespace) -> int:
@@ -302,7 +361,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("rules", help="规则引擎相关（阶段 6）")
     s.add_argument("action", choices=["validate", "test"],
-                   help="validate=校验 rules.yaml；test=用上下文模拟匹配")
+                   help="validate=校验规则文件；test=用上下文模拟匹配")
+    s.add_argument("--rules", metavar="PATH",
+                   help="规则文件路径（默认 ~/.skill-control-plane/rules.json|yaml）")
+    s.add_argument("--intent", default="", help="[test] 模拟 prompt 文本")
+    s.add_argument("--file", action="append", default=[], dest="files",
+                   metavar="PATH", help="[test] 模拟变更文件，可多次")
+    s.add_argument("--task-type", default=None, help="[test] edit/ask/...")
+    s.add_argument("--git-status", action="append", default=[], dest="git_status",
+                   metavar="STATE", help="[test] staged/modified，可多次")
+    s.add_argument("--dir", default=None, help="[test] 当前目录")
     s.set_defaults(func=_cmd_rules)
 
     s = sub.add_parser("dashboard", help="启本地只读看板（阶段 4）")

@@ -353,4 +353,31 @@ Phase 6 真正的"一键确认规则"（写 rules.yaml）才会加 POST 端点�
 - pyproject.toml `[project.urls].Source` 由 `_TBD_` 占位改为 `https://github.com/Edward4226/skillcli`。
 
 ---
+## 2026-06-08 · 阶段 6.A 规则引擎 + Claude hook（落地，触及两处 SPEC 出入）
+
+实装范围：`rules.py`（parse/validate/match/render + 加载器）、`hooks/claude/enforce_skill.py`
+（`UserPromptSubmit`）、CLI `rules validate|test`、`examples/rules.sample.{yaml,json}`、
+`tests/test_rules.py`（36 例）。全量 **105 passed**（前 69 不回归），并经真 stdin 端到端冒烟。
+
+### 出入 1：hook 读 `rules.json` 而非 `rules.yaml`（零依赖优先）
+- **冲突**：SPEC §9.1 把 `rules.yaml` 定为规则 schema，但 §9.2 又要求 hook「纯本地、快、
+  **零网络/零依赖感**」。YAML 解析需第三方 PyYAML（本项目 `dependencies=[]`，yaml 仅 optional）。
+- **取舍**：**`rules.json` 为运行时规范文件**（hook 用 stdlib 读，零依赖）；`rules.yaml` 作为
+  可选人写源，工具链装了 PyYAML 时可读。`find_rules_file` 优先 json 回退 yaml；
+  `load_rules_path` 按扩展名分派，缺 PyYAML 读 yaml 时抛清晰 `RuleParseError`（诚实降级）。
+- **影响**：样例同时提供 `.yaml`（人读）与 `.json`（hook 实读）。SPEC 不改（冻结副本），以本条为准。
+
+### 出入 2：`UserPromptSubmit` 无「变更文件」上下文 → `file_glob` 规则属 PreToolUse(P1)
+- **现实**：prompt 提交时刻宿主还没有「正在改的文件」，故 SPEC §9.1 旗舰样例 `sql-migrate`
+  （`file_glob` AND `intent_keywords`）**无法通过 UserPromptSubmit 触发**——它本质是 PreToolUse 规则。
+- **取舍**：保留 `sql-migrate` 作为 P1 PreToolUse 的范例；样例新增 `danger-intent-careful`
+  （**intent-only**）与修正后的 `infra-careful`（`dir` 现支持绝对 cwd 按路径段匹配），
+  使 UserPromptSubmit hook 有真实可触发路径。冒烟已证：高危 intent / infra 绝对 cwd 均真注入 Skill(careful)。
+- **影响**：`_dir_match` 增强为兼容绝对路径段匹配（否则 hook 拿到的绝对 cwd 永不命中相对规则）。
+
+### 仍未做（Phase 6 余下，不谎称完工 / Rule 11）
+- `PreToolUse` hook（拦截绕过、`file_glob` 真用上）、Codex 侧 hook、看板「确认草案→写回 rules」闭环。
+- **真机触发率 before/after 实验（SPEC §9.3 的 P1 关口，全项目成立与否的核心实验）尚未做。**
+
+---
 <!-- 后续条目按 ## YYYY-MM-DD · <主题> 追加 -->

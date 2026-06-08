@@ -65,6 +65,8 @@ skillcli rules validate  # 阶段 6
   - 69/69 unittest
 - [ ] 阶段 5：蒸馏票 `ticket-codex-maxxing/`（AGENTS.md / CLAUDE.md / 3 个 skill）
 - [ ] 阶段 6（P1）：规则引擎 + hooks（**Claude + Codex 双套**）+ 真机触发率实验（go/no-go 关口）
+  - [x] 6.A：`rules.py` 引擎（parse/validate/match/render）+ Claude `UserPromptSubmit` hook + CLI `rules validate|test` + 样例规则；105/105 unittest，真 stdin 端到端冒烟通过
+  - [ ] 6.B：`PreToolUse` hook（`file_glob` 拦截）+ Codex hook + 看板「确认草案→写回 rules」+ **真机 before/after 触发率实验**（核心 go/no-go）
 
 > Codex 适配为何在 P1 而非 SPEC 原定的 P2：见 [DECISIONS.md](DECISIONS.md) 2026-05-24 · Q5 反转。
 

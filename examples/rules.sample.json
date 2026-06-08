@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "id": "sql-migrate",
+      "description": "改 SQL 且意图涉及迁移时，强制先走 db-migrate skill 评估安全",
+      "when": {
+        "file_glob": ["**/*.sql"],
+        "intent_keywords": ["migration", "alter table", "建表", "迁移"]
+      },
+      "require": { "skill": "claude:user:db-migrate", "mode": "enforce" },
+      "message": "检测到 SQL 变更：必须先用 db-migrate 评估迁移安全。"
+    },
+    {
+      "id": "infra-careful",
+      "description": "动 infra/ 下基础设施时，建议先过 careful 安全模式",
+      "when": {
+        "dir": ["infra/"],
+        "intent_keywords": ["deploy", "terraform", "上线", "部署"]
+      },
+      "require": { "skill": "claude:user:careful", "mode": "suggest" },
+      "message": "正在改基础设施：考虑用 careful 模式复核破坏性操作。"
+    },
+    {
+      "id": "danger-intent-careful",
+      "description": "prompt 里出现高危意图（删库/线上/force push）时，建议先过 careful——仅靠 intent 即可触发，适配 UserPromptSubmit",
+      "when": {
+        "intent_keywords": ["drop table", "删库", "生产环境", "线上数据库", "force push", "rm -rf"]
+      },
+      "require": { "skill": "claude:user:careful", "mode": "suggest" },
+      "message": "检测到高危操作意图：建议先用 careful 复核不可逆步骤。"
+    }
+  ]
+}

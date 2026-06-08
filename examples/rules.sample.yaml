@@ -1,0 +1,35 @@
+# skill-control-plane 规则样例（SPEC §9.1）。
+# 人写源用 YAML；hook 运行时读零依赖的 rules.json（见 README 接入步骤）。
+# 约束：require.skill 必须是注册表中 badge==verified 的 skill，否则 `skillcli rules validate` 报错。
+version: 1
+rules:
+  - id: sql-migrate
+    description: 改 SQL 且意图涉及迁移时，强制先走 db-migrate skill 评估安全
+    when:                        # 同时给出的类别取 AND；未给出的类别忽略
+      file_glob: ["**/*.sql"]
+      intent_keywords: ["migration", "alter table", "建表", "迁移"]
+    require:
+      skill: "claude:user:db-migrate"   # 必须 verified
+      mode: "enforce"            # enforce=强制注入；suggest=软提示
+    message: "检测到 SQL 变更：必须先用 db-migrate 评估迁移安全。"
+
+  - id: infra-careful
+    description: 动 infra/ 下基础设施时，建议先过 careful 安全模式
+    when:
+      dir: ["infra/"]
+      intent_keywords: ["deploy", "terraform", "上线", "部署"]
+    require:
+      skill: "claude:user:careful"
+      mode: "suggest"
+    message: "正在改基础设施：考虑用 careful 模式复核破坏性操作。"
+
+  # intent-only：仅凭 prompt 文本即可触发，是 UserPromptSubmit 的天然适配形态
+  # （file_glob 类规则要等 P1 的 PreToolUse 才有"变更文件"上下文）。
+  - id: danger-intent-careful
+    description: prompt 出现高危意图（删库/线上/force push）时建议先过 careful
+    when:
+      intent_keywords: ["drop table", "删库", "生产环境", "线上数据库", "force push", "rm -rf"]
+    require:
+      skill: "claude:user:careful"
+      mode: "suggest"
+    message: "检测到高危操作意图：建议先用 careful 复核不可逆步骤。"
