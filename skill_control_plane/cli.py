@@ -1,7 +1,8 @@
 """skillcli CLI 入口。
 
-阶段 1 接通 `scan`；verify / usage / rules / dashboard / doctor 仍是 stub，
-打印"未实装（见 SPEC §14 阶段 N）"并返回退出码 2。
+已实装：scan（发现+注册表）、verify（质量门）、usage（用量/死重/规则建议）、
+rules（validate|test，确定性规则引擎）、dashboard（本地只读看板）。
+仍为 stub：doctor —— 打印"未实装（见 SPEC §14 阶段 N）"并返回退出码 2。
 """
 from __future__ import annotations
 
